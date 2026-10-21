@@ -85,6 +85,10 @@ cargo run --release
 
 上传后确认组件为「已上架」（未上架不会进入公开目录）。
 
+> **平台自身也会使用这些组件**：Pek.RPanlServer v0.1.45+ 会在「服务器节点」列表自动显示
+> IP 归属地（国家/省/市 + ISP/ASN），直接复用已上架的 `ip2region-v4` / `ip2region-v6` /
+> `geolite2-city` / `geolite2-asn`，无需任何额外配置。
+
 > **客户端按固定 id 加载**：默认 `load_default()` 会请求 `ip2region-v4`、`geolite2-city`、`geolite2-asn`；
 > `ip2region-v6` 只有 `DownloadV6=true` 或本地已有 v6 时才加载。城市库用 DB-IP City Lite 时**组件 id 也要是 `geolite2-city`**
 > （不要用 `dbip-city`，否则默认客户端找不到）；只上传 v4 也能启动，其余缺失时按 `allow_partial` 跳过。

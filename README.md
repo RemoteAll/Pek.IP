@@ -216,13 +216,9 @@ pub struct IpLocation {
    .\scripts\pack-ipdb.ps1 -File .\data\GeoLite2-City.mmdb -Id geolite2-city -Version 2026.10
    ```
 
-2. 打开 Pek.RPanlServer 管理端 →「下载管理 / 组件」→ 上传组件：
-   - 组件 id：脚本输出（如 `ip2region-v4`）
-   - 版本：脚本输出（如 `2026.10.21`）
-   - 目标平台：`any`
-   - 分类：`ip-database`
-   - 包：`dist/{id}-{version}-any.zip`
+2. 打开 Pek.RPanlServer 管理端 →「下载管理 / 组件」→ 上传组件：**只选择 `dist/{id}-{version}-any.zip` 即可**（v0.1.44+ 从包内 `dataset.json` 自动识别 id/版本/分类/目标平台/标题，不需要手工填写）；
 3. 确认组件已「上架」；客户端即可 `ensure_updated("ip2region-v4")`。
+4. Pek.RPanlServer v0.1.45+ 的「服务器节点」列表会自动复用这些组件显示 IP 归属地（国家/省/市 + ISP/ASN），无需额外配置。
 
 ### 数据集 id 约定
 
