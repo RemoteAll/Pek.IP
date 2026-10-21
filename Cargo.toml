@@ -1,0 +1,51 @@
+[package]
+name = "pek-ip"
+version = "0.1.0"
+edition = "2024"
+description = "Pek.IP：国内 ip2region + 国外 MaxMind/DB-IP MMDB 的离线 IP 定位库，支持按需从 Pek.RPanlServer 组件源下载数据"
+authors = ["PeiKeSmart"]
+license = "MIT"
+# 数据文件随仓库提供（便于本地运行/上传 RPanel），但不进入 crate 包，也不嵌入二进制
+exclude = ["data/**", "dist/**", ".ref/**"]
+
+[dependencies]
+# 统一错误类型
+thiserror = "2"
+# MMDB（GeoLite2 / DB-IP / GeoIP2）读取；纯 Rust
+maxminddb = { version = "0.32", optional = true }
+# 结果结构可选序列化（Web API 直接返回）
+serde = { version = "1", features = ["derive"], optional = true }
+# 组件源目录解析（仅 manager 特性）
+serde_json = { version = "1", optional = true }
+# DH 基础库：HTTP(S) 客户端、Ed25519 验签、ZIP 解压、SHA-256
+dhrust = { path = "../DH.RustBase", optional = true }
+
+[features]
+# 默认：xdb（纯标准库，始终编译）+ MMDB + 序列化
+default = ["mmdb", "serde"]
+# MMDB 读取（GeoLite2-City / GeoLite2-ASN / DB-IP City 等）
+mmdb = ["dep:maxminddb"]
+# IpLocation 的 Serialize/Deserialize
+serde = ["dep:serde"]
+# 按需下载：从 Pek.RPanlServer 组件源拉取数据包（Ed25519 验签 + SHA-256）
+manager = ["dep:dhrust", "dep:serde_json", "dhrust/http-tls", "dhrust/plugin"]
+# 全部能力
+full = ["mmdb", "serde", "manager"]
+
+[profile.release]
+lto = "thin"
+strip = true
+
+[[example]]
+name = "lookup"
+path = "examples/lookup.rs"
+
+[[example]]
+name = "store"
+path = "examples/store.rs"
+required-features = ["manager"]
+
+[[example]]
+name = "startup"
+path = "examples/startup.rs"
+required-features = ["manager"]

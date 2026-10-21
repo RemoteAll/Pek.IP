@@ -1,0 +1,6 @@
+# 国内 crates.io 镜像（rsproxy 稀疏索引）：透明替换，不改变 Cargo.lock 中的源地址
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
