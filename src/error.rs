@@ -41,6 +41,10 @@ pub enum Error {
     #[error("不支持的数据：{0}")]
     Unsupported(String),
 
+    /// 下载授权失败（注册/审批/License/票据/配额）。
+    #[error("下载授权失败：{0}")]
+    Auth(String),
+
     /// 路径不存在或不是文件。
     #[error("文件不存在：{0}")]
     MissingFile(PathBuf),

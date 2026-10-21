@@ -68,6 +68,9 @@ pub mod xdb;
 pub mod mmdb;
 
 #[cfg(feature = "manager")]
+pub mod auth;
+
+#[cfg(feature = "manager")]
 pub mod manager;
 
 #[cfg(feature = "manager")]
@@ -81,6 +84,9 @@ pub use xdb::{XdbIndexPolicy, XdbIpVersion, XdbReader};
 
 #[cfg(feature = "mmdb")]
 pub use mmdb::{MmdbKind, MmdbReader};
+
+#[cfg(feature = "manager")]
+pub use auth::{IpAuthConfig, License};
 
 #[cfg(feature = "manager")]
 pub use config::{DEFAULT_STORE_URL, IpConfig};

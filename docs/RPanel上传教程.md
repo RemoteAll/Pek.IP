@@ -132,9 +132,13 @@ DownloadV6 = false
 
 1. 先查 `data/ip2region_v4.xdb`、`data/ip2region_v6.xdb`、`data/*.mmdb`；
 2. 本地缺失 → 查本地缓存 `{cache_dir}/{id}/{version}/`；
-3. 缓存也没有 → 请求 `{store_url}/components/catalog.json`，验签后下载、SHA-256 校验、解压安装；
-4. 下载失败/无网络：`allow_partial=true`（默认）跳过，应用继续启动（可用 `has_china_db()`/`has_world_db()` 判断）；
+3. 缓存也没有 → 请求 `{store_url}/components/catalog.json`，验签后**自动注册/申请票据**并下载、SHA-256 校验、解压安装；
+4. 本地缺失/网络失败：`allow_partial=true`（默认）跳过，应用继续启动（可用 `has_china_db()`/`has_world_db()` 判断）；**授权被拒/签名错误不会被跳过**（会明确报错）；
 5. `allow_partial=false` 时缺数据直接报错，适合必须要有 IP 库的服务。
+
+> **首次下载会自动注册**：`AutoEnroll=true` 时库在 `StateDir` 生成 `install.id` + Ed25519 私钥，
+> 向平台 `/api/ipdb/enroll` 注册。平台命中 `AutoApproveCidrs` 时自动批准；否则管理员在
+> 平台「IP 授权」页点「批准」后，业务系统下一次下载即可通过。业务系统不需要配置 clientId 或任何密钥。
 
 ## 6. 更新数据
 
@@ -157,9 +161,17 @@ Remove-Item -Recurse -Force .\Data\IpCache -ErrorAction SilentlyContinue
 cargo run --features manager --example startup -- 114.114.114.114 8.8.8.8
 ```
 
+> 直接访问 `GET /components/{ip 包}.zip` 而不带票据会返回 **403**（仅 `category=ip-database` 的包）；
+> 数据库驱动等其它组件仍为公开下载。
+
 ## 8. 防滥用说明（重要）
 
-当前 `/components/*` 是**公开目录 + 公开包地址**，适合内网/受控环境。
-若要防止 PCDN/盗链刷流量，需要平台侧增加“签名许可证 + 短期下载票据”（或激活码 + 客户端密钥对）
-协议；客户端已预留 `access_token`（`Authorization: Bearer`）。详见
-`docs/下载授权协议.md` 与 `docs/决策记录.md` 的待确认项。
+平台 v0.1.42 起已实现「License + 短期票据」：
+
+- 平台「配置」页设置 `AutoApproveCidrs`（如 `127.0.0.1/32,10.0.0.0/8,192.168.0.0/16`）；
+- 业务系统首次启动自动注册；命中 CIDR 自动批准，否则在「IP 授权」页手动批准；
+- 每次下载前客户端用私钥签票据，平台验签、查每日配额（默认 20 次/天）、5 分钟过期、nonce 防重放；
+- 管理员可随时吊销客户端；下载时实时回查状态，吊销立即生效；
+- 平台部署在 Nginx 等反向代理之后时，勾选「信任反向代理头」或设置 `IpdbTrustProxy = true`，以便按真实客户端 IP 做 CIDR 判定。
+
+详见 [`下载授权协议.md`](下载授权协议.md)。

@@ -15,5 +15,7 @@
 - **按需下载**：消费 Pek.RPanlServer 组件源 `/components/catalog.json`（Ed25519 + SHA-256 + zip）。
 - **启动加载**：`IpLocator::load_default()` 读取 `Config/Ip.toml`（平台地址 `StoreUrl` 默认固定 `https://p.sc8.fun`），本地 `data/` 优先，缺失再下载。
 - **业务系统零身份配置**：`clientId`/`installId` 由库自动生成；业务系统不改身份配置。
+- **下载授权（防 PCDN）**：`AutoEnroll=true` 时 `src/auth.rs` 自动生成 installId + Ed25519 密钥，调用 `/api/ipdb/enroll|ticket`；平台 `src/ipdb.rs` + 面板「IP 授权」页负责审批/配额/票据；仅 `category=ip-database` 包要求票据。旧平台 404 自动回退公开下载，403/401 不回退。
+- 测试脚本：`scripts/_e2e-auth.ps1`（自动批准）、`_e2e-auth-manual.ps1`（待批准/配额/吊销/包策略）、`_e2e-startup.ps1`（真实数据启动加载）。
 - 构建：`cargo check` / `cargo test`；全特性：`cargo test --all-features`；格式：`cargo fmt`。
 - 改 `data/` 中文件或新增数据格式时，同步 `scripts/fetch-data.ps1`、`scripts/pack-ipdb.ps1` 与文档。

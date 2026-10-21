@@ -91,7 +91,16 @@ AutoEnroll = true
 DownloadV6 = false
 ```
 
-行为：本地 `data/` → 本地缓存 → 组件源下载（Ed25519 验签 + SHA-256）→ 失败按 `allow_partial` 跳过或报错。
+行为：本地 `data/` → 本地缓存 → 组件源下载（Ed25519 验签 + SHA-256）→ 本地缺失/网络失败按 `allow_partial` 跳过或报错；**授权被拒、签名/格式错误不会被跳过**。
+
+**自动授权（防 PCDN / 防批量转售，业务系统零身份配置）**：`AutoEnroll = true` 时，首次下载会自动：
+
+1. 在 `StateDir` 生成 `install.id` 与 Ed25519 私钥；
+2. 向平台 `POST /api/ipdb/enroll` 注册（平台按来源 CIDR 自动批准，或管理员在「IP 授权」页批准）；
+3. 获取平台签名的 License；
+4. 每次下载前用私钥签一张 5 分钟票据，向 `POST /api/ipdb/ticket` 换取一次性下载 URL（平台验签、查每日配额、防重放）。
+
+平台不支持授权接口（旧版本）时自动回退公开下载；授权接口明确返回 403/401 时**不会**回退。业务系统无需配置 clientId/密钥，只需 `StoreUrl` + `PubKey`。详见 [`docs/下载授权协议.md`](docs/下载授权协议.md)。
 
 ### 高级：代码内指定
 
@@ -145,7 +154,8 @@ fn main() -> Result<(), pek_ip::Error> {
 - `ensure`：本地有任意版本直接返回（离线优先）；没有才联网。
 - `ensure_updated`：联网检查最新版本，下载/安装；本地同版本且 SHA-256 一致则跳过。
 - `store_url` 为空 = **仅本地缓存模式**（离线部署/测试）。
-- `access_token`：以 `Authorization: Bearer` 发送，为平台后续“按需授权/付费下载”预留。
+- `auth`：默认关闭；`Config/Ip.toml` 的 `AutoEnroll=true` 会启用自动注册/票据。需要在代码内直接使用时，可设置 `IpDbManagerConfig { auth: IpAuthConfig { enabled: true, platform_pubkey: Some(pubkey), ..Default::default() }, .. }`。
+- `access_token`：仍保留为 `Authorization: Bearer` 透传（平台后续可叠加统一网关令牌）。
 
 ## 结果结构
 

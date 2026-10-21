@@ -14,7 +14,9 @@
 use pek_ip::{IpConfig, IpLocator};
 
 fn main() -> Result<(), pek_ip::Error> {
-    let base = std::env::current_dir()?;
+    let base = std::env::var_os("PEK_IP_BASE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| ".".into()));
     let config = IpConfig::load_or_default(&base)?;
     println!("平台地址：{}", config.store_url);
 

@@ -13,17 +13,20 @@
 //! - 配置 `pubkey` 后**强制验签**（此时允许内网 http 组件源）；为空时仅允许 https 或回环 http；
 //! - 包 SHA-256 强制校验；
 //! - 解压使用 `dhrust::zip::extract_zip`（防目录穿越）；
-//! - `access_token` 以 `Authorization: Bearer` 发送，供平台后续接入“按需授权/付费下载”。
+//! - `access_token` 以 `Authorization: Bearer` 发送，供平台后续接入“按需授权/付费下载”；
+//! - 启用 [`IpAuthConfig`] 时：首次下载自动注册/获取 License，每次下载申请 5 分钟票据；
+//!   旧平台没有 `/api/ipdb/*` 时自动回退公开下载，授权接口 403/401 不回退。
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::{Mutex, mpsc};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value as Json, json};
 
 use dhrust::net::http_client::{self, HttpClientOptions};
 
+use crate::auth::{AuthClient, AuthRuntime, IpAuthConfig};
 use crate::xdb::XdbReader;
 use crate::{Error, IpLocator, Result};
 
@@ -72,6 +75,9 @@ pub struct IpDbManagerConfig {
     pub package_limit: u64,
     /// 目标平台（缺省按当前平台识别；IP 数据包通常使用 `any`）。
     pub target: Option<String>,
+    /// 下载授权（零配置自动注册 + Ed25519 票据；默认关闭，`Config/Ip.toml` 的
+    /// `AutoEnroll=true` 时启用）。
+    pub auth: IpAuthConfig,
 }
 
 impl Default for IpDbManagerConfig {
@@ -86,6 +92,7 @@ impl Default for IpDbManagerConfig {
             keep_versions: 1,
             package_limit: DEFAULT_PACKAGE_LIMIT,
             target: None,
+            auth: IpAuthConfig::default(),
         }
     }
 }
@@ -253,6 +260,8 @@ pub struct IpDbManager {
     cache_dir: PathBuf,
     catalog_url: String,
     origin: String,
+    /// 授权运行时（首次下载时惰性创建；单飞锁避免重复注册）
+    auth: Mutex<Option<AuthRuntime>>,
 }
 
 impl IpDbManager {
@@ -285,6 +294,7 @@ impl IpDbManager {
             cache_dir,
             catalog_url,
             origin,
+            auth: Mutex::new(None),
         })
     }
 
@@ -629,8 +639,45 @@ impl IpDbManager {
         Ok(candidates[0])
     }
 
+    /// 申请授权下载 URL：返回 `None` = 使用目录中的公开 URL（未启用授权或旧平台不支持）。
+    fn authorized_url(&self, entry: &ComponentEntry) -> Result<Option<String>> {
+        if !self.cfg.auth.enabled || self.origin.is_empty() {
+            return Ok(None);
+        }
+        let mut guard = self
+            .auth
+            .lock()
+            .map_err(|_| Error::Auth("授权状态锁已损坏".to_string()))?;
+        if guard.is_none() {
+            let client = AuthClient::load_or_create(&self.cfg.auth, &self.cache_dir)?;
+            *guard = Some(AuthRuntime {
+                client,
+                unsupported: false,
+            });
+        }
+        let runtime = guard.as_mut().expect("auth runtime initialized");
+        if runtime.unsupported {
+            return Ok(None);
+        }
+        match runtime
+            .client
+            .ticket(&self.origin, &entry.id, &entry.version)
+        {
+            Ok(url) => Ok(Some(url)),
+            Err(Error::Unsupported(_)) => {
+                // 旧平台没有 `/api/ipdb/*`：退回公开下载（新平台仍由票据保护）
+                runtime.unsupported = true;
+                Ok(None)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
     fn download_and_install(&self, entry: &ComponentEntry) -> Result<InstalledDb> {
-        let url = self.absolute_url(&entry.url);
+        let url = match self.authorized_url(entry)? {
+            Some(url) => url,
+            None => self.absolute_url(&entry.url),
+        };
         fs::create_dir_all(&self.cache_dir)?;
         let package_path = self.cache_dir.join(format!(
             ".download-{}-{}-{}.zip",

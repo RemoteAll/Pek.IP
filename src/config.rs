@@ -8,6 +8,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::auth::IpAuthConfig;
 use crate::{Error, IpDbManagerConfig, IpLocator, LocatorLoadOptions, Result};
 
 /// 默认 RPanelServer 平台地址（固定；一般无需修改）。
@@ -166,11 +167,28 @@ impl IpConfig {
 
     /// 转成管理器配置。
     pub fn to_manager_config(&self) -> Result<IpDbManagerConfig> {
+        let ca_pem = self.ca_pem()?;
+        let platform_pubkey = {
+            let key = self.pubkey.trim();
+            if key.is_empty() {
+                None
+            } else {
+                Some(key.to_string())
+            }
+        };
         Ok(IpDbManagerConfig {
             store_url: self.store_url.clone(),
             pubkey: self.pubkey.clone(),
-            ca_pem: self.ca_pem()?,
+            ca_pem: ca_pem.clone(),
             cache_dir: Some(self.cache_dir.clone()),
+            auth: IpAuthConfig {
+                // 零配置：默认自动注册；平台不支持时客户端自动回退公开下载
+                enabled: self.auto_enroll,
+                state_dir: Some(self.state_dir.clone()),
+                platform_pubkey,
+                ca_pem,
+                ..Default::default()
+            },
             ..Default::default()
         })
     }

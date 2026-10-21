@@ -5,6 +5,7 @@
 StoreUrl = "https://p.sc8.fun"
 
 # 平台 Ed25519 公钥（从 RPanel「组件源」页复制；非空 = 强制验签）
+# 同时用于校验平台下发的 License 与下载票据；建议显式配置
 PubKey = ""
 
 # 本地数据目录（仓库 data/ 或部署目录；相对路径按程序目录）
@@ -13,10 +14,11 @@ DataDir = "data"
 # 下载缓存目录
 CacheDir = "Data/IpCache"
 
-# 客户端状态目录（installId/密钥/License；auto 模式预留）
+# 客户端状态目录（自动生成 installId、Ed25519 私钥、License、平台公钥；勿手工改）
 StateDir = "Data/IpClient"
 
-# 自动注册（零身份配置）
+# 自动注册（零身份配置）：首次下载时自动注册；平台按 AutoApproveCidrs 自动批准，
+# 或管理员在「IP 授权」页手动批准。关闭后不注册、不申请票据。
 AutoEnroll = true
 
 # 是否允许下载 IPv6 xdb（约 37 MiB）
