@@ -85,6 +85,9 @@ foreach ($item in $dbip) {
     $mmdb = Join-Path $data ("{0}-{1}.mmdb" -f $item.Name, $DbIpMonth)
     Download-File $item.Url $gz
     Expand-Gzip $gz $mmdb
+    if ((Test-Path -LiteralPath $mmdb) -and (Test-Path -LiteralPath $gz)) {
+        Remove-Item -LiteralPath $gz -Force
+    }
 }
 
 Write-Host ''
