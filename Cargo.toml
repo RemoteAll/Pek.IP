@@ -28,7 +28,7 @@ mmdb = ["dep:maxminddb"]
 # IpLocation 的 Serialize/Deserialize
 serde = ["dep:serde"]
 # 按需下载：从 Pek.RPanlServer 组件源拉取数据包（Ed25519 验签 + SHA-256）
-manager = ["dep:dhrust", "dep:serde_json", "dhrust/http-tls", "dhrust/plugin"]
+manager = ["dep:dhrust", "dep:serde_json", "dhrust/http-tls", "dhrust/plugin", "dhrust/toml"]
 # 全部能力
 full = ["mmdb", "serde", "manager"]
 

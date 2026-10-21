@@ -1,0 +1,28 @@
+# Pek.IP 配置（TOML）
+# 首次加载时若本文件不存在，会自动按模板生成。
+# 平台地址固定；如需更换 RPanelServer，只改 StoreUrl 这一项即可。
+
+# RPanelServer 平台地址（默认固定，一般无需修改）
+StoreUrl = "https://p.sc8.fun"
+
+# 平台 Ed25519 公钥（从 RPanel「组件源」页复制；非空 = 强制验签）
+# 留空时仅允许 https 或回环 http
+PubKey = ""
+
+# 本地数据目录（仓库 data/ 或部署目录；相对路径按程序目录）
+DataDir = "data"
+
+# 下载缓存目录（按需下载的数据包解压到这里）
+CacheDir = "Data/IpCache"
+
+# 客户端状态目录（installId/密钥/License；auto 模式预留）
+StateDir = "Data/IpClient"
+
+# 自动注册（零身份配置）；关闭后必须预置 License
+AutoEnroll = true
+
+# 是否允许下载 IPv6 xdb（约 37 MiB；本地有 v6 时总会加载）
+DownloadV6 = false
+
+# 平台 https 自定义根证书（PEM 文件；自签/内网 CA 时填写）
+CaFile = ""

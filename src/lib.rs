@@ -70,6 +70,9 @@ pub mod mmdb;
 #[cfg(feature = "manager")]
 pub mod manager;
 
+#[cfg(feature = "manager")]
+pub mod config;
+
 pub use error::{Error, Result};
 pub use locator::{IpLocator, IpLocatorBuilder};
 pub use region::CnRegion;
@@ -78,6 +81,9 @@ pub use xdb::{XdbIndexPolicy, XdbIpVersion, XdbReader};
 
 #[cfg(feature = "mmdb")]
 pub use mmdb::{MmdbKind, MmdbReader};
+
+#[cfg(feature = "manager")]
+pub use config::{IpConfig, DEFAULT_STORE_URL};
 
 #[cfg(feature = "manager")]
 pub use manager::{

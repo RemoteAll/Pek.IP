@@ -1,39 +1,25 @@
-//! 启动时自动加载/下载示例：
+//! 启动时自动加载/下载示例（零业务配置）：
 //!
-//! 1. 先查本地 `data/`（仓库自带 ip2region v4/v6、DB-IP Country/ASN）；
-//! 2. 缺失时从 Pek.RPanlServer 组件源按需下载；
-//! 3. 都不可用时按 `allow_partial` 决定跳过或报错。
+//! 1. 读取 `Config/Ip.toml`（平台地址固定，默认 `https://p.sc8.fun`；不存在自动生成）；
+//! 2. 先查本地 `data/`（仓库自带 ip2region v4/v6、DB-IP Country/ASN）；
+//! 3. 缺失时从 Pek.RPanlServer 组件源按需下载；
+//! 4. 都不可用时按 `allow_partial` 决定跳过或报错。
 //!
 //! ```text
-//! set PEK_IP_STORE_URL=https://p.sc8.fun
-//! set PEK_IP_STORE_PUBKEY=<平台 Ed25519 公钥 hex>
-//! set PEK_IP_DATA_DIR=data
 //! cargo run --features manager --example startup -- 114.114.114.114 8.8.8.8
 //! ```
+//!
+//! 临时切换平台地址：改 `Config/Ip.toml` 的 `StoreUrl`，或设置 `PEK_IP_STORE_URL`。
 
-use pek_ip::{IpDbManagerConfig, IpLocator, LocatorLoadOptions};
+use pek_ip::{IpConfig, IpLocator};
 
 fn main() -> Result<(), pek_ip::Error> {
-    let config = IpDbManagerConfig {
-        store_url: std::env::var("PEK_IP_STORE_URL").unwrap_or_default(),
-        pubkey: std::env::var("PEK_IP_STORE_PUBKEY").unwrap_or_default(),
-        cache_dir: std::env::var_os("PEK_IP_CACHE_DIR").map(Into::into),
-        access_token: std::env::var("PEK_IP_STORE_TOKEN").ok(),
-        ..Default::default()
-    };
-    let data_dir = std::env::var_os("PEK_IP_DATA_DIR")
-        .map(Into::into)
-        .unwrap_or_else(|| "data".into());
+    let base = std::env::current_dir()?;
+    let config = IpConfig::load_or_default(&base)?;
+    println!("平台地址：{}", config.store_url);
 
-    let locator = IpLocator::load_or_download(
-        config,
-        LocatorLoadOptions {
-            data_dir,
-            load_v6: true,
-            download_v6: false, // 需要 IPv6 且允许下载 37MB 时改为 true
-            ..Default::default()
-        },
-    )?;
+    let locator =
+        IpLocator::load_or_download(config.to_manager_config()?, config.to_load_options())?;
 
     println!(
         "国内数据：{}，国外数据：{}",
