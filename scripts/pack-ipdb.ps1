@@ -41,8 +41,9 @@ function Infer-Id([string]$name) {
     if ($lower -match 'geolite2.*city') { return 'geolite2-city' }
     if ($lower -match 'geolite2.*asn') { return 'geolite2-asn' }
     if ($lower -match 'geolite2.*country') { return 'geolite2-country' }
-    if ($lower -match 'dbip.*city') { return 'dbip-city' }
-    if ($lower -match 'dbip.*asn') { return 'dbip-asn' }
+    if ($lower -match 'dbip.*city') { return 'geolite2-city' }
+    if ($lower -match 'dbip.*country') { return 'geolite2-city' }
+    if ($lower -match 'dbip.*asn') { return 'geolite2-asn' }
     return ''
 }
 

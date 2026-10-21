@@ -97,4 +97,4 @@ Write-Host '  下载 GeoLite2-City.mmdb / GeoLite2-ASN.mmdb 后放入 data/ 即�
 Write-Host ''
 Write-Host '完成。上传 RPanel：'
 Write-Host '  .\scripts\pack-ipdb.ps1 -File .\data\ip2region_v4.xdb -Version 2026.10'
-Write-Host '  .\scripts\pack-ipdb.ps1 -File .\data\dbip-city-lite-2026-10.mmdb -Id dbip-city -Version 2026.10'
+Write-Host '  .\scripts\pack-ipdb.ps1 -File .\data\dbip-city-lite-2026-10.mmdb -Id geolite2-city -Version 2026.10'

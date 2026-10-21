@@ -232,7 +232,7 @@ pub struct IpLocation {
 | `DATASET_IP2REGION_V6` | `ip2region-v6` | ip2region IPv6 xdb |
 | `DATASET_GEOLITE2_CITY` | `geolite2-city` | GeoLite2/DB-IP City MMDB |
 | `DATASET_GEOLITE2_ASN` | `geolite2-asn` | GeoLite2/GeoIP2 ASN/ISP MMDB |
-| `DATASET_DBIP_CITY` | `dbip-city` | DB-IP City MMDB |
+| `DATASET_DBIP_CITY` | `dbip-city` | DB-IP City MMDB（可选别名；默认 `load_world` 使用 `geolite2-city`） |
 
 zip 内可直接放数据文件（可含子目录），管理器会递归查找 `.xdb` / `.mmdb`。
 

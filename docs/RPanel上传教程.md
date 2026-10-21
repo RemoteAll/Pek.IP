@@ -33,10 +33,10 @@ data/
 # 国内 IPv6（可选）
 .\scripts\pack-ipdb.ps1 -File .\data\ip2region_v6.xdb -Version 2026.10
 
-# 国外城市（DB-IP City Lite）
-.\scripts\pack-ipdb.ps1 -File .\data\dbip-city-lite-2026-10.mmdb -Id dbip-city -Version 2026.10
+# 国外城市/国家（客户端默认按 geolite2-city 加载；DB-IP City Lite 也用这个 id）
+.\scripts\pack-ipdb.ps1 -File .\data\dbip-city-lite-2026-10.mmdb -Id geolite2-city -Version 2026.10
 
-# 国外 ASN
+# 国外 ASN（客户端默认按 geolite2-asn 加载）
 .\scripts\pack-ipdb.ps1 -File .\data\dbip-asn-lite-2026-10.mmdb -Id geolite2-asn -Version 2026.10
 ```
 
@@ -46,7 +46,7 @@ data/
 dist/
 ├─ ip2region-v4-2026.10-any.zip
 ├─ ip2region-v6-2026.10-any.zip
-├─ dbip-city-2026.10-any.zip
+├─ geolite2-city-2026.10-any.zip
 └─ geolite2-asn-2026.10-any.zip
 ```
 
@@ -71,7 +71,7 @@ cargo run --release
 
 | 字段 | 值 |
 |------|----|
-| 组件 ID | `ip2region-v4` / `ip2region-v6` / `dbip-city` / `geolite2-asn` |
+| 组件 ID | `ip2region-v4` / `ip2region-v6` / `geolite2-city` / `geolite2-asn` |
 | 标题 | 如 `ip2region IPv4 2026.10` |
 | 分类 | **`ip-database`** |
 | 版本 | `2026.10`（建议用数据月份，客户端按数字段比较） |
@@ -80,6 +80,11 @@ cargo run --release
 | 包文件 | `dist/{id}-{version}-any.zip` |
 
 上传后确认组件为「已上架」（未上架不会进入公开目录）。
+
+> **客户端按固定 id 加载**：默认 `load_default()` 会请求 `ip2region-v4`、`geolite2-city`、`geolite2-asn`；
+> `ip2region-v6` 只有 `DownloadV6=true` 或本地已有 v6 时才加载。城市库用 DB-IP City Lite 时**组件 id 也要填 `geolite2-city`**
+> （不要填 `dbip-city`，否则默认客户端找不到）；只上传 v4 也能启动，其余缺失时按 `allow_partial` 跳过。
+> 当前 `data/dbip-country-lite-*.mmdb` 是国家级别；要城市级请先 `fetch-data.ps1 -City` 或使用 GeoLite2-City。
 
 ## 4. 上传组件（curl 方式，可选）
 
