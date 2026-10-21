@@ -67,24 +67,30 @@ cargo run --release
 
 ## 3. 上传组件（面板方式）
 
-进入「下载管理」→「组件」→「上传组件」，按下表填写：
+进入「下载管理」→「组件下载」→「上传组件」，**直接选择 `dist/{id}-{version}-any.zip` 即可**：
+`pack-ipdb.ps1` 已在包内生成 `dataset.json`，平台 v0.1.44+ 会自动识别组件 id、标题、分类
+（`ip-database`）、版本、目标平台（`any`）和说明，无需手工填写。
+
+只有需要覆盖包内元数据时才填下表；留空 = 自动识别：
 
 | 字段 | 值 |
 |------|----|
-| 组件 ID | `ip2region-v4` / `ip2region-v6` / `geolite2-city` / `geolite2-asn` |
-| 标题 | 如 `ip2region IPv4 2026.10` |
-| 分类 | **`ip-database`** |
-| 版本 | `2026.10`（建议用数据月份，客户端按数字段比较） |
-| 目标平台 | **`any`** |
-| 说明 | 可选，写数据来源/许可 |
+| 组件 ID | 留空 = `dataset.json` 的 `id`（如 `ip2region-v4`） |
+| 标题 | 留空 = `dataset.json` 的 `title` |
+| 分类 | 留空 = `dataset.json` 的 `category`（`ip-database`） |
+| 版本 | 留空 = `dataset.json` 的 `version`（如 `2026.10`） |
+| 目标平台 | 留空/默认 = `dataset.json` 的 `target`（`any`） |
+| 说明 | 留空 = `dataset.json` 的 `notes` |
 | 包文件 | `dist/{id}-{version}-any.zip` |
 
 上传后确认组件为「已上架」（未上架不会进入公开目录）。
 
 > **客户端按固定 id 加载**：默认 `load_default()` 会请求 `ip2region-v4`、`geolite2-city`、`geolite2-asn`；
-> `ip2region-v6` 只有 `DownloadV6=true` 或本地已有 v6 时才加载。城市库用 DB-IP City Lite 时**组件 id 也要填 `geolite2-city`**
-> （不要填 `dbip-city`，否则默认客户端找不到）；只上传 v4 也能启动，其余缺失时按 `allow_partial` 跳过。
+> `ip2region-v6` 只有 `DownloadV6=true` 或本地已有 v6 时才加载。城市库用 DB-IP City Lite 时**组件 id 也要是 `geolite2-city`**
+> （不要用 `dbip-city`，否则默认客户端找不到）；只上传 v4 也能启动，其余缺失时按 `allow_partial` 跳过。
 > 当前 `data/dbip-country-lite-*.mmdb` 是国家级别；要城市级请先 `fetch-data.ps1 -City` 或使用 GeoLite2-City。
+
+> 数据库驱动等没有 `dataset.json` 的包仍需填组件 id/版本/目标平台；分类留空默认为 `database-driver`。
 
 ## 4. 上传组件（curl 方式，可选）
 
@@ -96,8 +102,8 @@ $body = '{"user":"admin","password":"admin"}'
 curl.exe -s -X POST "$base/api/login" -H 'Content-Type: application/json' --data-binary "@$env:TEMP\login.json" -o "$env:TEMP\login-resp.json"
 $token = (Get-Content "$env:TEMP\login-resp.json" -Raw | ConvertFrom-Json).data.token
 
-# 2) 上传（zip 作为原始 body）
-curl.exe -s -X POST "$base/api/componentUpload?componentId=ip2region-v4&title=ip2region%20IPv4&category=ip-database&version=2026.10&target=any&notes=ip2region" `
+# 2) 上传（IP 库包只传 zip，id/版本/分类等由包内 dataset.json 自动识别）
+curl.exe -s -X POST "$base/api/componentUpload" `
   -H "Authorization: Bearer $token" -H 'Content-Type: application/zip' `
   --data-binary "@dist\ip2region-v4-2026.10-any.zip" -o "$env:TEMP\upload-resp.json"
 Get-Content "$env:TEMP\upload-resp.json" -Raw
@@ -171,7 +177,7 @@ cargo run --features manager --example startup -- 114.114.114.114 8.8.8.8
 
 ## 8. 防滥用说明（重要）
 
-平台 v0.1.43 起已实现「License + 短期票据 + 服务器节点 IP 自动批准」：
+平台 v0.1.44 起已实现「License + 短期票据 + 服务器节点 IP 自动批准 + 上传自动识别」：
 
 - 平台「配置」页设置 `AutoApproveCidrs`（如 `127.0.0.1/32,10.0.0.0/8,192.168.0.0/16`）；
 - 或保持 `IpdbTrustAgentNodes = true`，让已登记服务器节点上的业务系统自动批准；

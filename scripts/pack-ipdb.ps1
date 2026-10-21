@@ -145,7 +145,9 @@ try {
         schema    = 1
         id        = $Id
         title     = $Title
+        category  = 'ip-database'
         version   = $Version
+        target    = 'any'
         format    = $format
         ipVersion = $ipVersion
         kind      = $kind
