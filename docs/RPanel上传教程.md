@@ -137,7 +137,7 @@ DownloadV6 = false
 5. `allow_partial=false` 时缺数据直接报错，适合必须要有 IP 库的服务。
 
 > **首次下载会自动注册**：`AutoEnroll=true` 时库在 `StateDir` 生成 `install.id` + Ed25519 私钥，
-> 向平台 `/api/ipdb/enroll` 注册。平台命中 `AutoApproveCidrs` 时自动批准；否则管理员在
+> 向平台 `/api/ipdb/enroll` 注册。平台命中 `AutoApproveCidrs` 或来源 IP 等于已登记服务器节点 IP（`IpdbTrustAgentNodes`）时自动批准；否则管理员在
 > 平台「IP 授权」页点「批准」后，业务系统下一次下载即可通过。业务系统不需要配置 clientId 或任何密钥。
 
 ## 6. 更新数据
@@ -166,9 +166,10 @@ cargo run --features manager --example startup -- 114.114.114.114 8.8.8.8
 
 ## 8. 防滥用说明（重要）
 
-平台 v0.1.42 起已实现「License + 短期票据」：
+平台 v0.1.43 起已实现「License + 短期票据 + 服务器节点 IP 自动批准」：
 
 - 平台「配置」页设置 `AutoApproveCidrs`（如 `127.0.0.1/32,10.0.0.0/8,192.168.0.0/16`）；
+- 或保持 `IpdbTrustAgentNodes = true`，让已登记服务器节点上的业务系统自动批准；
 - 业务系统首次启动自动注册；命中 CIDR 自动批准，否则在「IP 授权」页手动批准；
 - 每次下载前客户端用私钥签票据，平台验签、查每日配额（默认 20 次/天）、5 分钟过期、nonce 防重放；
 - 管理员可随时吊销客户端；下载时实时回查状态，吊销立即生效；
