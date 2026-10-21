@@ -69,7 +69,31 @@ fn main() -> Result<(), pek_ip::Error> {
 }
 ```
 
-### 启动时自动加载/下载（推荐）
+### 启动时自动加载/下载（推荐：零业务配置）
+
+```rust
+# fn main() -> Result<(), pek_ip::Error> {
+let locator = pek_ip::IpLocator::load_default()?;
+# Ok(()) }
+```
+
+库自动读取 `Config/Ip.toml`（不存在会按模板生成），平台地址默认固定为 `https://p.sc8.fun`；
+需要更换 RPanelServer 时只改这一项：
+
+```toml
+# Config/Ip.toml
+StoreUrl = "https://p.sc8.fun"
+PubKey = ""              # 平台 Ed25519 公钥；非空 = 强制验签
+DataDir = "data"
+CacheDir = "Data/IpCache"
+StateDir = "Data/IpClient"
+AutoEnroll = true
+DownloadV6 = false
+```
+
+行为：本地 `data/` → 本地缓存 → 组件源下载（Ed25519 验签 + SHA-256）→ 失败按 `allow_partial` 跳过或报错。
+
+### 高级：代码内指定
 
 ```rust
 use pek_ip::{IpDbManagerConfig, IpLocator, LocatorLoadOptions};
@@ -77,22 +101,20 @@ use pek_ip::{IpDbManagerConfig, IpLocator, LocatorLoadOptions};
 # fn main() -> Result<(), pek_ip::Error> {
 let locator = IpLocator::load_or_download(
     IpDbManagerConfig {
-        store_url: "https://p.sc8.fun".into(), // 空 = 只用本地/缓存
+        store_url: "https://p.sc8.fun".into(),
         pubkey: "<平台 Ed25519 公钥 hex>".into(),
         cache_dir: Some("Data/IpCache".into()),
         ..Default::default()
     },
     LocatorLoadOptions {
         data_dir: "data".into(),
-        load_v6: true,        // 本地有 v6 就加载
-        download_v6: false,   // 需要下载 37MB v6 时改 true
+        load_v6: true,
+        download_v6: false,
         ..Default::default()
     },
 )?;
 # Ok(()) }
 ```
-
-行为：本地 `data/` → 本地缓存 → 组件源下载（Ed25519 验签 + SHA-256）→ 失败按 `allow_partial` 跳过或报错。
 
 ### 按需下载（Pek.RPanlServer 组件源）
 

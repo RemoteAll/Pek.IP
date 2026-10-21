@@ -120,36 +120,38 @@ impl IpConfig {
 
     /// 环境变量覆盖（便于 CI/临时切换，无需改文件）。
     fn apply_env(&mut self, base: &Path) {
-        if let Ok(v) = std::env::var("PEK_IP_STORE_URL") {
-            if !v.trim().is_empty() {
-                self.store_url = v.trim().trim_end_matches('/').to_string();
-            }
+        if let Ok(v) = std::env::var("PEK_IP_STORE_URL")
+            && !v.trim().is_empty()
+        {
+            self.store_url = v.trim().trim_end_matches('/').to_string();
         }
-        if let Ok(v) = std::env::var("PEK_IP_PUBKEY") {
-            if !v.trim().is_empty() {
-                self.pubkey = v.trim().to_string();
-            }
+        if let Ok(v) = std::env::var("PEK_IP_PUBKEY")
+            && !v.trim().is_empty()
+        {
+            self.pubkey = v.trim().to_string();
         }
-        if let Ok(v) = std::env::var("PEK_IP_DATA_DIR") {
-            if !v.trim().is_empty() {
-                self.data_dir = resolve_path(base, v.trim());
-            }
+        if let Ok(v) = std::env::var("PEK_IP_DATA_DIR")
+            && !v.trim().is_empty()
+        {
+            self.data_dir = resolve_path(base, v.trim());
         }
-        if let Ok(v) = std::env::var("PEK_IP_CACHE_DIR") {
-            if !v.trim().is_empty() {
-                self.cache_dir = resolve_path(base, v.trim());
-            }
+        if let Ok(v) = std::env::var("PEK_IP_CACHE_DIR")
+            && !v.trim().is_empty()
+        {
+            self.cache_dir = resolve_path(base, v.trim());
         }
-        if let Ok(v) = std::env::var("PEK_IP_STATE_DIR") {
-            if !v.trim().is_empty() {
-                self.state_dir = resolve_path(base, v.trim());
-            }
+        if let Ok(v) = std::env::var("PEK_IP_STATE_DIR")
+            && !v.trim().is_empty()
+        {
+            self.state_dir = resolve_path(base, v.trim());
         }
         if let Ok(v) = std::env::var("PEK_IP_AUTO_ENROLL") {
-            self.auto_enroll = !matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "false" | "no");
+            self.auto_enroll =
+                !matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "false" | "no");
         }
         if let Ok(v) = std::env::var("PEK_IP_DOWNLOAD_V6") {
-            self.download_v6 = matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes");
+            self.download_v6 =
+                matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes");
         }
     }
 

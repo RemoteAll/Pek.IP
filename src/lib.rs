@@ -83,7 +83,7 @@ pub use xdb::{XdbIndexPolicy, XdbIpVersion, XdbReader};
 pub use mmdb::{MmdbKind, MmdbReader};
 
 #[cfg(feature = "manager")]
-pub use config::{IpConfig, DEFAULT_STORE_URL};
+pub use config::{DEFAULT_STORE_URL, IpConfig};
 
 #[cfg(feature = "manager")]
 pub use manager::{

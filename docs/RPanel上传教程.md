@@ -102,32 +102,31 @@ curl.exe -s "$base/api/componentInfo" -H "Authorization: Bearer $token" -o "$env
 (Get-Content "$env:TEMP\info-resp.json" -Raw | ConvertFrom-Json).data.pubkey
 ```
 
-## 5. 业务系统启动时加载
+## 5. 业务系统启动时加载（零业务配置）
+
+业务系统只需要一行：
 
 ```rust
-use pek_ip::{IpDbManagerConfig, IpLocator, LocatorLoadOptions};
-
-fn main() -> Result<(), pek_ip::Error> {
-    let locator = IpLocator::load_or_download(
-        IpDbManagerConfig {
-            store_url: "http://127.0.0.1:5502".into(), // 生产换 https
-            pubkey: "<第 4 步拿到的公钥>".into(),      // 非空 = 强制验签
-            cache_dir: Some("Data/IpCache".into()),    // 下载缓存
-            ..Default::default()
-        },
-        LocatorLoadOptions {
-            data_dir: "data".into(),   // 本地优先
-            load_v6: true,             // 本地有 v6 就加载
-            download_v6: false,        // 需要 v6 且允许下载 37MB 时改 true
-            ..Default::default()
-        },
-    )?;
-
-    let loc = locator.lookup_str("114.114.114.114")?;
-    println!("{}", loc.display_short());
-    Ok(())
-}
+# fn main() -> Result<(), pek_ip::Error> {
+let locator = pek_ip::IpLocator::load_default()?;
+# Ok(()) }
 ```
+
+平台地址等配置在 **`Config/Ip.toml`**（库首次运行自动生成；平台地址固定，只改 `StoreUrl` 即可）：
+
+```toml
+# Config/Ip.toml
+StoreUrl = "https://p.sc8.fun"   # 本地调试可改 http://127.0.0.1:5502
+PubKey = ""                      # 第 4 步拿到的公钥；非空 = 强制验签
+DataDir = "data"
+CacheDir = "Data/IpCache"
+StateDir = "Data/IpClient"
+AutoEnroll = true
+DownloadV6 = false
+```
+
+> 临时切换平台地址也可用环境变量 `PEK_IP_STORE_URL`；`clientId`/`installId` 由库自动生成，
+> 业务系统不需要配置任何身份。
 
 行为：
 

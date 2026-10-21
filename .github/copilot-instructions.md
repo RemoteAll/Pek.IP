@@ -13,6 +13,7 @@
 - **数据文件在仓库 `data/`，但不打包进 crate/二进制**（`Cargo.toml` 的 `exclude = ["data/**", ...]`）。
 - **国内 + 国外**：ip2region xdb v3（v4/v6）+ MaxMind/DB-IP MMDB；合并逻辑在 `locator.rs`。
 - **按需下载**：消费 Pek.RPanlServer 组件源 `/components/catalog.json`（Ed25519 + SHA-256 + zip）。
-- **启动加载**：`IpLocator::load_or_download(...)` 优先本地 `data/`，缺失再下载。
+- **启动加载**：`IpLocator::load_default()` 读取 `Config/Ip.toml`（平台地址 `StoreUrl` 默认固定 `https://p.sc8.fun`），本地 `data/` 优先，缺失再下载。
+- **业务系统零身份配置**：`clientId`/`installId` 由库自动生成；业务系统不改身份配置。
 - 构建：`cargo check` / `cargo test`；全特性：`cargo test --all-features`；格式：`cargo fmt`。
 - 改 `data/` 中文件或新增数据格式时，同步 `scripts/fetch-data.ps1`、`scripts/pack-ipdb.ps1` 与文档。
