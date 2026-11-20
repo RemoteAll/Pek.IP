@@ -235,8 +235,11 @@ impl AuthClient {
                 .get("message")
                 .and_then(|v| v.as_str())
                 .unwrap_or("等待平台管理员批准");
-            return Err(Error::Auth(format!(
-                "{}（installId={}）",
+            // 待批准是「状态」不是「故障」：调用方（allow_partial）可以跳过并继续跑，
+            // 下一步动作写清楚，免得运维对着 installId 猜。
+            return Err(Error::Pending(format!(
+                "{}（installId={}；请在 Pek.RPanlServer 面板「分发中心 → IP 授权」点批准，\
+                 或把源 IP 段加入 AutoApproveCidrs）",
                 msg, self.install_id
             )));
         }

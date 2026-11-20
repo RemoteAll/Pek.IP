@@ -6,8 +6,8 @@
 - **国外**：读取 MaxMind GeoLite2 / GeoIP2、DB-IP 等 MMDB（国家/省/市/经纬度/时区/ASN）；
 - **双源合并**：国内 IP 用 ip2region 的省市，经纬度/时区/区县由 MMDB 补齐；国外 IP 以 MMDB 为主；
 - **特殊地址**：内网、回环、链路本地、组播、文档/保留地址直接识别，不查库；
-- **按需下载**：从 Pek.RPanlServer 组件源下载数据包（Ed25519 验签 + SHA-256），本地缓存、离线可用。
-
+- **按需下载**：从 Pek.RPanlServer 组件源下载数据包（Ed25519 验签 + SHA-256），本地缓存、离线可用。- **本机镜像**：与 Zig 版 `Pek.ZIP` 同一契约，装了 Pek.RAgent 的机器默认就会先探 `http://127.0.0.1:5501/ipdb`；
+  命中即从镜像取（目录按平台原始字节转发、验签照旧），失败自动回退平台。
 数据文件随仓库 `data/` 提供（基础集：ip2region v4/v6 + DB-IP Country/ASN），但 **不会打包进 crate 或二进制**（`Cargo.toml` 的 `exclude`）。城市级 MMDB 体积较大，按需下载或自行放入 `data/`。
 
 - 上传教程：[`docs/RPanel上传教程.md`](docs/RPanel上传教程.md)
@@ -24,6 +24,8 @@
 | 合并策略 | 国内省市以 xdb 为准，坐标/时区由 MMDB 补齐 |
 | 线程安全 | 数据加载后只读，`Send + Sync`，查询无锁 |
 | 按需下载 | 组件源目录 + Ed25519 签名 + SHA-256 + zip 解压 |
+| 本机镜像 | 自动探测本机 RAgent 的 `/ipdb`（默认 `http://127.0.0.1:5501/ipdb`，超时 800ms），同机只下一次、不占用平台授权配额；不可用自动回退平台 |
+| 授权友好 | 平台「待批准」不阻塞启动：`allow_partial` 下跳过并写日志（含 installId 与下一步），下次启动自动重试 |
 | 轻量 | xdb 解析纯标准库；MMDB 用纯 Rust `maxminddb`；无 C 依赖 |
 
 ## 数据源与许可

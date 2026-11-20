@@ -14,6 +14,9 @@ use crate::{Error, IpDbManagerConfig, IpLocator, LocatorLoadOptions, Result};
 /// 默认 RPanelServer 平台地址（固定；一般无需修改）。
 pub const DEFAULT_STORE_URL: &str = "https://p.sc8.fun";
 
+/// 默认镜像探测地址：本机 Pek.RAgent 的 IP 库镜像（与 Zig 版 `Pek.ZIP` 同一口径）。
+pub const DEFAULT_MIRROR_PROBE_URL: &str = "http://127.0.0.1:5501/ipdb";
+
 const CONFIG_DIR: &str = "Config";
 const CONFIG_FILE: &str = "Ip.toml";
 const TEMPLATE: &str = include_str!("../res/Ip.toml.template");
@@ -37,6 +40,10 @@ pub struct IpConfig {
     pub download_v6: bool,
     /// 平台 https 自定义根证书（PEM 文件）。
     pub ca_file: Option<PathBuf>,
+    /// 本机/内网组件镜像根地址（如 `http://127.0.0.1:5501/ipdb`；空 = 不指定）。
+    pub mirror_url: Option<String>,
+    /// 镜像自动探测地址（空 = 不探测）。
+    pub mirror_probe_url: Option<String>,
 }
 
 impl Default for IpConfig {
@@ -50,6 +57,8 @@ impl Default for IpConfig {
             auto_enroll: true,
             download_v6: false,
             ca_file: None,
+            mirror_url: None,
+            mirror_probe_url: Some(DEFAULT_MIRROR_PROBE_URL.to_string()),
         }
     }
 }
@@ -115,6 +124,13 @@ impl IpConfig {
         if let Some(v) = get("CaFile") {
             cfg.ca_file = Some(resolve_path(base, &v));
         }
+        // 镜像：显式写了就用；显式写空串 = 关闭探测（离线/不想探本机的场景）
+        if json.get("MirrorUrl").is_some() {
+            cfg.mirror_url = get("MirrorUrl");
+        }
+        if json.get("MirrorProbeUrl").is_some() {
+            cfg.mirror_probe_url = get("MirrorProbeUrl");
+        }
         cfg.store_url = cfg.store_url.trim().trim_end_matches('/').to_string();
         Ok(cfg)
     }
@@ -154,6 +170,22 @@ impl IpConfig {
             self.download_v6 =
                 matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes");
         }
+        if let Ok(v) = std::env::var("PEK_IP_MIRROR_URL") {
+            let v = v.trim();
+            self.mirror_url = if v.is_empty() {
+                None
+            } else {
+                Some(v.trim_end_matches('/').to_string())
+            };
+        }
+        if let Ok(v) = std::env::var("PEK_IP_MIRROR_PROBE_URL") {
+            let v = v.trim();
+            self.mirror_probe_url = if v.is_empty() {
+                None
+            } else {
+                Some(v.trim_end_matches('/').to_string())
+            };
+        }
     }
 
     /// 读取 CA PEM（若配置）。
@@ -189,6 +221,8 @@ impl IpConfig {
                 ca_pem,
                 ..Default::default()
             },
+            mirror_url: self.mirror_url.clone(),
+            mirror_probe_url: self.mirror_probe_url.clone(),
             ..Default::default()
         })
     }

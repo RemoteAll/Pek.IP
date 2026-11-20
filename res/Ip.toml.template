@@ -29,3 +29,12 @@ DownloadV6 = false
 
 # 平台 https 自定义根证书（PEM 文件；自签/内网 CA 时填写）
 CaFile = ""
+
+# 本地组件镜像（可选）：指向本机/内网的组件镜像根地址（如 Pek.RAgent 的 /ipdb）。
+# 镜像命中时直接取目录与包，**不申请授权票据**（RAgent 只读自身缓存，同机只下一次）。
+# 例：MirrorUrl = "http://127.0.0.1:8899/ipdb"
+#MirrorUrl = ""
+
+# 镜像自动探测：MirrorUrl 留空时请求这个地址的 /components/catalog.json，
+# 2xx 就用它，探不到（超时 800ms）当没有、回退平台。写空串 = 关闭探测。
+MirrorProbeUrl = "http://127.0.0.1:5501/ipdb"

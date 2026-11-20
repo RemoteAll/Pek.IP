@@ -47,6 +47,11 @@ pub const DATASET_GEOLITE2_ASN: &str = "geolite2-asn";
 pub const DATASET_DBIP_CITY: &str = "dbip-city";
 
 const CATALOG_PATH: &str = "/components/catalog.json";
+/// 镜像目录路径：镜像根已指向 `/ipdb`，所以目录是 `{mirror}/catalog.json`
+/// （与 `Pek.RAgent/src/ipdb.rs` 的 `/ipdb/catalog.json` 契约一致；**不要**再拼 `/components`）。
+const MIRROR_CATALOG_PATH: &str = "/catalog.json";
+/// 镜像自动探测超时：探不到就当没有，不能拖慢启动（与 Zig 版 `Pek.ZIP` 同一口径）。
+const MIRROR_PROBE_TIMEOUT: Duration = Duration::from_millis(800);
 const DEFAULT_CACHE_DIR: &str = "pek-ip-data";
 const MARKER_FILE: &str = ".pek-ip.json";
 const MAX_CATALOG_BYTES: usize = 1024 * 1024;
@@ -78,6 +83,16 @@ pub struct IpDbManagerConfig {
     /// 下载授权（零配置自动注册 + Ed25519 票据；默认关闭，`Config/Ip.toml` 的
     /// `AutoEnroll=true` 时启用）。
     pub auth: IpAuthConfig,
+    /// 本机/内网组件镜像根地址（如 `http://127.0.0.1:5501/ipdb`；空 = 不指定）。
+    ///
+    /// 镜像目录与平台同构：`{mirror}/catalog.json`(+`.sig`) 与 `{mirror}/components/<文件名>`；
+    /// 目录里的 `url` 是平台地址，镜像模式下**必须按文件名重拼**（否则绕过镜像直连平台），
+    /// 且镜像命中时不申请授权票据（RAgent 只读自身缓存，不再转发授权）。
+    pub mirror_url: Option<String>,
+    /// 镜像自动探测地址（空 = 不探测）：请求 `{probe}/catalog.json`，2xx 才用。
+    ///
+    /// 典型值 `http://127.0.0.1:5501/ipdb`（本机 Pek.RAgent 的 IP 库镜像）。
+    pub mirror_probe_url: Option<String>,
 }
 
 impl Default for IpDbManagerConfig {
@@ -93,6 +108,8 @@ impl Default for IpDbManagerConfig {
             package_limit: DEFAULT_PACKAGE_LIMIT,
             target: None,
             auth: IpAuthConfig::default(),
+            mirror_url: None,
+            mirror_probe_url: None,
         }
     }
 }
@@ -262,6 +279,10 @@ pub struct IpDbManager {
     origin: String,
     /// 授权运行时（首次下载时惰性创建；单飞锁避免重复注册）
     auth: Mutex<Option<AuthRuntime>>,
+    /// 镜像根地址（首次下载时解析一次：显式配置 > 探测结果 > None）
+    mirror: Mutex<Option<String>>,
+    /// 是否已解析过镜像（避免每次都探测）
+    mirror_resolved: Mutex<bool>,
 }
 
 impl IpDbManager {
@@ -277,6 +298,19 @@ impl IpDbManager {
         if has_pubkey {
             dhrust::plugin::parse_pubkey(cfg.pubkey.trim())
                 .map_err(|e| Error::Argument(format!("公钥无效（{e}）")))?;
+        }
+        // 镜像地址走与组件源同一套准入规则：https 任意，http 仅回环（或配了公钥的内网）
+        for (label, value) in [
+            ("MirrorUrl", cfg.mirror_url.as_deref()),
+            ("MirrorProbeUrl", cfg.mirror_probe_url.as_deref()),
+        ] {
+            if let Some(url) = value.map(str::trim).filter(|s| !s.is_empty())
+                && !url_allowed(url, has_pubkey)
+            {
+                return Err(Error::Argument(format!(
+                    "{label} 地址不被允许（需 https；http 仅允许回环或配了公钥的内网）：{url}"
+                )));
+            }
         }
         let (catalog_url, origin) = if store.is_empty() {
             (String::new(), String::new())
@@ -295,6 +329,8 @@ impl IpDbManager {
             catalog_url,
             origin,
             auth: Mutex::new(None),
+            mirror: Mutex::new(None),
+            mirror_resolved: Mutex::new(false),
         })
     }
 
@@ -308,38 +344,79 @@ impl IpDbManager {
         !self.catalog_url.is_empty()
     }
 
-    /// 拉取组件源目录（联网模式）。
+    /// 拉取组件源目录（镜像优先，失败回退平台）。
     pub fn catalog(&self) -> Result<Vec<ComponentEntry>> {
+        if let Some(mirror) = self.mirror_base() {
+            let url = format!("{mirror}{MIRROR_CATALOG_PATH}");
+            match self.fetch_catalog(&url) {
+                Ok(list) => return Ok(list),
+                Err(err) => {
+                    dhrust::logs::warn!("[Pek.IP] 镜像目录不可用（{url}），回退平台：{err}");
+                }
+            }
+        }
         if !self.is_online() {
             return Err(Error::Store("未配置组件源（仅本地缓存模式）".to_string()));
         }
-        let bytes = self.http_get(&self.catalog_url, MAX_CATALOG_BYTES, "组件目录")?;
+        self.fetch_catalog(&self.catalog_url)
+    }
+
+    /// 从指定地址拉目录（镜像与平台同一套解析/验签逻辑）。
+    fn fetch_catalog(&self, catalog_url: &str) -> Result<Vec<ComponentEntry>> {
+        let bytes = self.http_get(catalog_url, MAX_CATALOG_BYTES, "组件目录")?;
         if !self.cfg.pubkey.trim().is_empty() {
-            let sig_url = format!("{}.sig", self.catalog_url);
+            let sig_url = format!("{catalog_url}.sig");
             let sig = self.http_get(&sig_url, MAX_SIGNATURE_BYTES, "目录签名")?;
             let sig_text = String::from_utf8_lossy(&sig);
             dhrust::plugin::verify_base64(self.cfg.pubkey.trim(), &bytes, sig_text.trim())
                 .map_err(|e| Error::Verify(format!("组件目录签名校验失败：{e}")))?;
         }
-        let text = String::from_utf8(bytes)
-            .map_err(|e| Error::Store(format!("组件目录不是 UTF-8：{e}")))?;
-        let root: Json = serde_json::from_str(&text)
-            .map_err(|e| Error::Store(format!("组件目录 JSON 解析失败：{e}")))?;
-        let items = root
-            .get("components")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| Error::Store("组件目录缺少 components 数组".to_string()))?;
-        let mut out = Vec::with_capacity(items.len());
-        for item in items {
-            match ComponentEntry::from_json(item) {
-                Ok(entry) => out.push(entry),
-                Err(err) => {
-                    // 单条无效不影响其它条目（与驱动/插件源一致）
-                    let _ = err;
-                }
-            }
+        parse_catalog(&bytes)
+    }
+
+    /// 镜像根地址（首次访问时解析一次）。
+    fn mirror_base(&self) -> Option<String> {
+        if let Ok(resolved) = self.mirror_resolved.lock()
+            && *resolved
+        {
+            return self.mirror.lock().ok().and_then(|guard| guard.clone());
         }
-        Ok(out)
+        let value = self.resolve_mirror();
+        if let Ok(mut guard) = self.mirror.lock() {
+            *guard = value.clone();
+        }
+        if let Ok(mut resolved) = self.mirror_resolved.lock() {
+            *resolved = true;
+        }
+        value
+    }
+
+    /// 解析镜像：显式配置优先，否则探测（`{probe}/catalog.json` 2xx 才算有）。
+    fn resolve_mirror(&self) -> Option<String> {
+        if let Some(url) = self
+            .cfg
+            .mirror_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            return Some(url.trim_end_matches('/').to_string());
+        }
+        let probe = self
+            .cfg
+            .mirror_probe_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())?
+            .trim_end_matches('/')
+            .to_string();
+        let url = format!("{probe}{MIRROR_CATALOG_PATH}");
+        // 探不到就当没有：超时 800ms，不能拖慢启动（与 Zig 版 Pek.ZIP 同一口径）。
+        // 注意上限按目录大小给（实测平台目录 ~87 KB），给 64 KB 会把"探到了"误判成"没超上限"。
+        match self.http_get_with_timeout(&url, MAX_CATALOG_BYTES, "镜像探测", MIRROR_PROBE_TIMEOUT) {
+            Ok(_) => Some(probe),
+            Err(_) => None,
+        }
     }
 
     /// 确保数据集可用：本地有任意版本则直接返回（离线优先），否则联网下载。
@@ -674,10 +751,6 @@ impl IpDbManager {
     }
 
     fn download_and_install(&self, entry: &ComponentEntry) -> Result<InstalledDb> {
-        let url = match self.authorized_url(entry)? {
-            Some(url) => url,
-            None => self.absolute_url(&entry.url),
-        };
         fs::create_dir_all(&self.cache_dir)?;
         let package_path = self.cache_dir.join(format!(
             ".download-{}-{}-{}.zip",
@@ -685,7 +758,29 @@ impl IpDbManager {
             sanitize(&entry.version),
             std::process::id()
         ));
-        let result = self.download_package(&url, &package_path);
+
+        // 优先走本机镜像（RAgent `/ipdb`）：同机只下一次，且不占用平台的授权/配额。
+        let mut result = None;
+        if let Some(mirror) = self.mirror_base() {
+            let url = mirror_component_url(&mirror, &entry.url);
+            match self.download_package(&url, &package_path) {
+                Ok(()) => result = Some(Ok(())),
+                Err(err) => {
+                    dhrust::logs::warn!("[Pek.IP] 镜像下载 {} 失败，回退平台：{err}", entry.id);
+                    let _ = fs::remove_file(&package_path);
+                }
+            }
+        }
+        let result = match result {
+            Some(ok) => ok,
+            None => {
+                let url = match self.authorized_url(entry)? {
+                    Some(url) => url,
+                    None => self.absolute_url(&entry.url),
+                };
+                self.download_package(&url, &package_path)
+            }
+        };
         let result = match result {
             Ok(()) => (|| {
                 let data = fs::read(&package_path)?;
@@ -850,7 +945,21 @@ impl IpDbManager {
     }
 
     fn http_get(&self, url: &str, max: usize, what: &str) -> Result<Vec<u8>> {
-        let options = self.http_options();
+        self.http_get_with_timeout(url, max, what, self.http_timeout())
+    }
+
+    fn http_timeout(&self) -> Duration {
+        self.cfg.timeout.unwrap_or(Duration::from_secs(60))
+    }
+
+    fn http_get_with_timeout(
+        &self,
+        url: &str,
+        max: usize,
+        what: &str,
+        timeout: Duration,
+    ) -> Result<Vec<u8>> {
+        let options = self.http_options_with(timeout);
         let headers = self.headers();
         let refs: Vec<(&str, &str)> = headers
             .iter()
@@ -926,8 +1035,12 @@ impl IpDbManager {
     }
 
     fn http_options(&self) -> HttpClientOptions {
+        self.http_options_with(self.http_timeout())
+    }
+
+    fn http_options_with(&self, timeout: Duration) -> HttpClientOptions {
         HttpClientOptions {
-            timeout: self.cfg.timeout.unwrap_or(Duration::from_secs(60)),
+            timeout,
             insecure_tls: false,
             ca_pem: self.cfg.ca_pem.clone(),
         }
@@ -1069,6 +1182,12 @@ fn optional_dataset<T>(
         Err(err) if allow_partial && matches!(err, Error::DatasetNotFound(_) | Error::Store(_)) => {
             Ok(None)
         }
+        // 等待平台批准：启动路径下**跳过**（没有 IP 库也能识别内网/保留地址），
+        // 并把「下一步点哪里」写进日志；下次启动/下次 ensure 会自动重试。
+        Err(err @ Error::Pending(_)) if allow_partial => {
+            dhrust::logs::warn!("[Pek.IP] 跳过数据集 {dataset_id}：{err}；本地有旧数据时继续使用");
+            Ok(None)
+        }
         Err(err) => Err(err),
     }
 }
@@ -1162,6 +1281,50 @@ fn now_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+/// 解析组件目录 JSON（镜像与平台共用；单条无效不影响其它条目）。
+fn parse_catalog(bytes: &[u8]) -> Result<Vec<ComponentEntry>> {
+    // 容忍 BOM：现场手工改过/用 PowerShell 存的目录会带 UTF-8 BOM，直接喂 serde 会报
+    // `expected value at line 1 column 1`（实测踩过）。
+    let bytes = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(bytes);
+    let text = String::from_utf8(bytes.to_vec())
+        .map_err(|e| Error::Store(format!("组件目录不是 UTF-8：{e}")))?;
+    let root: Json = serde_json::from_str(&text)
+        .map_err(|e| Error::Store(format!("组件目录 JSON 解析失败：{e}")))?;
+    let items = root
+        .get("components")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| Error::Store("组件目录缺少 components 数组".to_string()))?;
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        if let Ok(entry) = ComponentEntry::from_json(item) {
+            out.push(entry);
+        }
+    }
+    Ok(out)
+}
+
+/// 取 URL 的文件名（去掉目录、查询串与片段）。
+pub fn component_file_name(url: &str) -> &str {
+    let rest = url.trim();
+    let rest = match rest.find(['?', '#']) {
+        Some(i) => &rest[..i],
+        None => rest,
+    };
+    match rest.rsplit('/').next() {
+        Some(name) if !name.is_empty() => name,
+        _ => rest,
+    }
+}
+
+/// 镜像模式下的包地址：`{mirror}/components/{文件名}`。
+///
+/// 目录里的 `url` 是平台绝对地址（`https://p.sc8.fun/components/x.zip`），
+/// 原样使用就会绕过镜像直连平台——所以镜像模式必须按文件名重拼。
+pub fn mirror_component_url(mirror: &str, entry_url: &str) -> String {
+    let name = component_file_name(entry_url);
+    format!("{}/components/{name}", mirror.trim_end_matches('/'))
 }
 
 fn url_allowed(url: &str, has_pubkey: bool) -> bool {
@@ -1454,5 +1617,89 @@ mod tests {
         let err = mgr.build_locator(strict).unwrap_err();
         assert!(matches!(err, Error::DatasetNotFound(_)));
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn mirror_urls_follow_ragent_layout() {
+        // 目录里是平台绝对地址，镜像模式必须按文件名重拼，否则绕过镜像直连平台
+        assert_eq!(
+            mirror_component_url("http://127.0.0.1:5501/ipdb", "https://p.sc8.fun/components/a.zip"),
+            "http://127.0.0.1:5501/ipdb/components/a.zip"
+        );
+        // 尾斜杠、查询串、相对地址都要能处理
+        assert_eq!(
+            mirror_component_url("http://127.0.0.1:5501/ipdb/", "/components/b.zip?v=2"),
+            "http://127.0.0.1:5501/ipdb/components/b.zip"
+        );
+        assert_eq!(component_file_name("c.zip#frag"), "c.zip");
+        assert_eq!(component_file_name("c.zip"), "c.zip");
+    }
+
+    #[test]
+    fn catalog_parse_skips_invalid_entries() {
+        let ok_sha = "a".repeat(64);
+        let ok_sha2 = "b".repeat(64);
+        let body = format!(
+            r#"{{"version":1,"components":[
+            {{"id":"ip2region-v4","version":"2026.10","sha256":"{ok_sha}","url":"https://x/components/a.zip"}},
+            {{"id":"","version":"1"}},
+            {{"id":"geolite2-city","version":"2026.10","sha256":"{ok_sha2}","url":"/components/b.zip"}}
+        ]}}"#
+        );
+        let list = parse_catalog(body.as_bytes()).unwrap();
+        assert_eq!(list.len(), 2, "{list:?}");
+        assert_eq!(list[0].id, "ip2region-v4");
+        assert_eq!(list[1].id, "geolite2-city");
+        assert!(parse_catalog(b"not json").is_err());
+    }
+
+    #[test]
+    fn pending_is_skipped_only_when_partial() {
+        // 待批准 = 状态：启动路径（allow_partial）跳过并继续；严格模式仍要暴露
+        let skipped = optional_dataset::<()>(
+            Err(Error::Pending("等待批准（installId=x）".to_string())),
+            true,
+            "ip2region-v4",
+        )
+        .unwrap();
+        assert!(skipped.is_none());
+
+        let strict = optional_dataset::<()>(
+            Err(Error::Pending("等待批准".to_string())),
+            false,
+            "ip2region-v4",
+        );
+        assert!(matches!(strict, Err(Error::Pending(_))));
+
+        // 其它授权错误（吊销/配额）不允许被吞
+        let denied = optional_dataset::<()>(
+            Err(Error::Auth("已吊销".to_string())),
+            true,
+            "ip2region-v4",
+        );
+        assert!(matches!(denied, Err(Error::Auth(_))));
+    }
+
+    #[test]
+    fn mirror_probe_is_disabled_by_default_config_shape() {
+        // 默认配置只有探测地址、没有显式镜像：resolve 出来必须是 None（本机没有 RAgent 时）
+        let mgr = IpDbManager::new(IpDbManagerConfig {
+            mirror_probe_url: Some("http://127.0.0.1:9/ipdb".to_string()),
+            ..Default::default()
+        })
+        .unwrap();
+        assert!(mgr.mirror_base().is_none());
+
+        // 显式配置直接用，不探测
+        let explicit = IpDbManager::new(IpDbManagerConfig {
+            mirror_url: Some("http://127.0.0.1:5501/ipdb/".to_string()),
+            mirror_probe_url: Some("http://127.0.0.1:9/ipdb".to_string()),
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(
+            explicit.mirror_base().as_deref(),
+            Some("http://127.0.0.1:5501/ipdb")
+        );
     }
 }
